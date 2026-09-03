@@ -41,7 +41,42 @@ export function computeBossHp(seq: SequenceDef, states: Map<string, ItemState>):
 
   const frontierValue = frontier === null ? 0 : seq.term(frontier);
   const rawHp = knownSum * 1.25 + frontierValue * 0.5;
-  // 読みやすいきりのいい数に丸める(上位2桁)
-  const magnitude = 10 ** Math.max(0, Math.floor(Math.log10(rawHp)) - 1);
-  return Math.max(FIRST_BOSS_HP, Math.round(rawHp / magnitude) * magnitude);
+  return Math.max(FIRST_BOSS_HP, roundNice(rawHp));
+}
+
+/** 読みやすいきりのいい数に丸める(上位2桁) */
+function roundNice(value: number): number {
+  const magnitude = 10 ** Math.max(0, Math.floor(Math.log10(value)) - 1);
+  return Math.round(value / magnitude) * magnitude;
+}
+
+/** 1バトルに登場する敵の数(小物→中ボス→大ボスの3段階) */
+export const STAGE_COUNT = 3;
+
+/** 記録ベースの総量(computeBossHp)を3体に配分する割合 */
+const STAGE_SHARES = [0.25, 0.35, 0.5] as const;
+
+/**
+ * stage番目(1〜3)の敵のHP。
+ * HP = max(「今の登り位置から3歩先まで登った量」, 記録ベースの配分)。
+ * - 前者があるので、初回プレイ(記録ゼロ)でも敵がその場の登りに追従して強くなり、
+ *   実力があれば初日から先へ進める(コールドスタート対策)。
+ * - 後者があるので、記録が溜まった子には3体合計で「登り切り+一歩」の総量になる。
+ * climbPos: 直前に正解した項のindex(バトル開始時は firstIndex - 1)
+ */
+export function computeStageBossHp(
+  seq: SequenceDef,
+  states: Map<string, ItemState>,
+  climbPos: number,
+  stage: number,
+): number {
+  let nextStepsSum = 0;
+  for (let step = 1; step <= 3; step++) {
+    const index = climbPos + step;
+    if (index > seq.lastIndex) break;
+    nextStepsSum += seq.term(index);
+  }
+  const share = STAGE_SHARES[Math.min(stage, STAGE_COUNT) - 1] ?? 1;
+  const shareHp = computeBossHp(seq, states) * share;
+  return roundNice(Math.max(nextStepsSum, shareHp, 10));
 }

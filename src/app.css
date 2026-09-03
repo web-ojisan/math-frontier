@@ -101,6 +101,33 @@ body {
   height: auto;
   margin: 0 auto;
 }
+/* 段階が上がるほど大きく=強そうに見せる */
+.boss-stage-1 {
+  width: min(40vw, 220px);
+}
+.boss-stage-3 {
+  width: min(70vw, 420px);
+}
+
+.stage-label {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+  color: var(--color-text-soft);
+}
+
+.defeat-pop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 40%;
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  animation: pop-up 1.4s ease-out forwards;
+  pointer-events: none;
+}
 
 .hpbar {
   height: 16px;

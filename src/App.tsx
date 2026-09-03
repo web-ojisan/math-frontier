@@ -3,7 +3,7 @@
 // 反応時間は「出題表示から最初のタップまで」をfirstKeyMsとして記録する(CLAUDE.md 計測規約)。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadAttempts, saveAttempt } from './attempt-store';
-import { computeBossHp, damageFor } from './boss';
+import { computeStageBossHp, damageFor, STAGE_COUNT } from './boss';
 import { getSequence } from './sequences';
 import { estimateAllStates, type Attempt } from './state-estimator';
 
@@ -17,10 +17,44 @@ function countAuto(states: Map<string, string>): number {
   return [...states.values()].filter((state) => state === 'auto').length;
 }
 
-/** 完全オリジナルの単純なボス(既存ゲームのキャラクターに寄せない) */
-function BossFigure() {
+/** 完全オリジナルの単純なボスたち(既存ゲームのキャラクターに寄せない)。3段階で強そうになる */
+function BossFigure({ stage = 2 }: { stage?: number }) {
+  if (stage === 1) {
+    // 小物: まるい緑のスライム風(ツノなし)
+    return (
+      <svg viewBox="0 0 100 80" className="boss-figure boss-stage-1" role="img" aria-label="てき">
+        <ellipse cx="50" cy="50" rx="26" ry="22" fill="#5ec26a" />
+        <circle cx="42" cy="46" r="5" fill="#fff" />
+        <circle cx="58" cy="46" r="5" fill="#fff" />
+        <circle cx="43" cy="47" r="2.2" fill="#1b1035" />
+        <circle cx="59" cy="47" r="2.2" fill="#1b1035" />
+        <path d="M44 58 Q50 62 56 58" stroke="#1b1035" stroke-width="2.5" fill="none" stroke-linecap="round" />
+      </svg>
+    );
+  }
+  if (stage >= 3) {
+    // 大ボス: 赤い巨体・ツノ3本・きば
+    return (
+      <svg viewBox="0 0 100 90" className="boss-figure boss-stage-3" role="img" aria-label="大ボス">
+        <ellipse cx="50" cy="52" rx="36" ry="32" fill="#e2504c" />
+        <circle cx="37" cy="44" r="7" fill="#fff" />
+        <circle cx="63" cy="44" r="7" fill="#fff" />
+        <circle cx="39" cy="46" r="3" fill="#1b1035" />
+        <circle cx="65" cy="46" r="3" fill="#1b1035" />
+        <path d="M30 40 L44 44" stroke="#1b1035" stroke-width="2.5" stroke-linecap="round" />
+        <path d="M70 40 L56 44" stroke="#1b1035" stroke-width="2.5" stroke-linecap="round" />
+        <path d="M36 66 Q50 74 64 66" stroke="#1b1035" stroke-width="3" fill="none" stroke-linecap="round" />
+        <path d="M42 66 L45 72 L48 66 Z" fill="#fff" />
+        <path d="M52 66 L55 72 L58 66 Z" fill="#fff" />
+        <path d="M22 26 L30 8 L38 26 Z" fill="#ffd94d" />
+        <path d="M44 22 L50 4 L56 22 Z" fill="#ffd94d" />
+        <path d="M62 26 L70 8 L78 26 Z" fill="#ffd94d" />
+      </svg>
+    );
+  }
+  // 中ボス: 紫のツノ2本(従来のキャラ)
   return (
-    <svg viewBox="0 0 100 80" className="boss-figure" role="img" aria-label="ボス">
+    <svg viewBox="0 0 100 80" className="boss-figure boss-stage-2" role="img" aria-label="ボス">
       <ellipse cx="50" cy="46" rx="32" ry="28" fill="#7c5cff" />
       <circle cx="39" cy="40" r="6.5" fill="#fff" />
       <circle cx="61" cy="40" r="6.5" fill="#fff" />
@@ -83,8 +117,8 @@ export default function App() {
   if (screen === 'victory' && victory) {
     return (
       <main className="app center">
-        <p className="victory-title">ボスを たおした!</p>
-        <BossFigure />
+        <p className="victory-title">ぜんぶの てきを たおした!</p>
+        <BossFigure stage={3} />
         <p className="victory-line">あたえた ダメージ: <strong>{victory.totalDamage}</strong></p>
         {victory.newlyAuto > 0 && (
           <p className="victory-line">そくとうできる かずが <strong>+{victory.newlyAuto}</strong> ふえた!</p>
@@ -119,7 +153,7 @@ export default function App() {
   );
 }
 
-type Effect = { kind: 'hit' | 'critical' | 'miss' | 'guard'; damage: number; key: number };
+type Effect = { kind: 'hit' | 'critical' | 'miss' | 'guard' | 'defeat'; damage: number; key: number };
 
 function Battle({
   pastAttempts,
@@ -128,8 +162,11 @@ function Battle({
   pastAttempts: Attempt[];
   onFinish: (sessionAttempts: Attempt[], info: VictoryInfo) => void;
 }) {
-  // ボスHPはバトル開始時点の実力から逆算して固定
-  const bossMaxHp = useMemo(() => computeBossHp(seq, estimateAllStates(pastAttempts)), [pastAttempts]);
+  // 敵は3段階(小物→中ボス→大ボス)。HPは登り位置と記録から逆算する(boss.ts参照)
+  const [stage, setStage] = useState(1);
+  const [bossMaxHp, setBossMaxHp] = useState(() =>
+    computeStageBossHp(seq, estimateAllStates(pastAttempts), seq.firstIndex - 1, 1),
+  );
   const [bossHp, setBossHp] = useState(bossMaxHp);
   const [sessionAttempts, setSessionAttempts] = useState<Attempt[]>([]);
   const [typed, setTyped] = useState('');
@@ -202,6 +239,18 @@ function Battle({
       setEffect({ kind: critical ? 'critical' : 'hit', damage, key: effectKeyRef.current });
 
       if (newHp <= 0) {
+        if (stage < STAGE_COUNT) {
+          // 次の敵が登場。登りは続きから(HPは今の登り位置と記録から逆算)
+          const nextStage = stage + 1;
+          const statesNow = estimateAllStates([...pastAttempts, ...updated]);
+          const nextHp = computeStageBossHp(seq, statesNow, questionIndex, nextStage);
+          setStage(nextStage);
+          setBossMaxHp(nextHp);
+          setBossHp(nextHp);
+          setEffect({ kind: 'defeat', damage, key: effectKeyRef.current });
+          showQuestion(questionIndex >= seq.lastIndex ? seq.firstIndex : questionIndex + 1);
+          return;
+        }
         finishedRef.current = true;
         const beforeAuto = countAuto(estimateAllStates(pastAttempts));
         const afterAuto = countAuto(estimateAllStates([...pastAttempts, ...updated]));
@@ -265,11 +314,12 @@ function Battle({
   return (
     <main className="app battle">
       <div className="boss-area" key={effect?.kind === 'critical' ? `shake-${effect.key}` : 'still'}>
+        <p className="stage-label">てき {stage} / {STAGE_COUNT}</p>
         <div className="hpbar">
           <div className="hpfill" style={{ width: `${(bossHp / bossMaxHp) * 100}%` }} />
         </div>
         <div className={effect?.kind === 'critical' ? 'shake' : ''}>
-          <BossFigure />
+          <BossFigure stage={stage} />
         </div>
         {effect && (effect.kind === 'hit' || effect.kind === 'critical') && (
           <p key={effect.key} className={`damage-pop ${effect.kind}`}>
@@ -282,6 +332,9 @@ function Battle({
         )}
         {effect && effect.kind === 'guard' && (
           <p key={effect.key} className="miss-pop">ガードされた! さいしょから もういちど!</p>
+        )}
+        {effect && effect.kind === 'defeat' && (
+          <p key={effect.key} className="defeat-pop">たおした! つぎのてきが あらわれた!</p>
         )}
       </div>
 
