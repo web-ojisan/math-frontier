@@ -170,6 +170,7 @@ function Battle({
     setTyped((t) => (t.length >= 7 ? t : t + digit));
   };
 
+
   const attack = () => {
     if (finishedRef.current || typed === '') return;
     const value = parseInt(typed, 10);
@@ -233,6 +234,36 @@ function Battle({
     }
   };
 
+  // 物理キーボード対応(ノートPC・iPad+キーボード): 数字キー、Backspace=1文字消す、Enter=こうげき。
+  // ハンドラは毎レンダーの最新をrefで参照し、リスナー登録は1回だけにする
+  const keyHandlersRef = useRef({ tapDigit, attack, backspace: () => {} });
+  keyHandlersRef.current = {
+    tapDigit,
+    attack,
+    backspace: () => {
+      if (finishedRef.current) return;
+      markFirstKey();
+      setTyped((t) => t.slice(0, -1));
+    },
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key >= '0' && event.key <= '9') {
+        event.preventDefault();
+        keyHandlersRef.current.tapDigit(event.key);
+      } else if (event.key === 'Backspace') {
+        event.preventDefault();
+        keyHandlersRef.current.backspace();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        keyHandlersRef.current.attack();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   return (
     <main className="app battle">
       <div className="boss-area" key={effect?.kind === 'critical' ? `shake-${effect.key}` : 'still'}>
@@ -262,7 +293,8 @@ function Battle({
       </div>
 
       <div className="keypad">
-        {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+        {/* 電卓と同じ配列(789が上段)。机に置いたiPadで打ちやすい */}
+        {['7', '8', '9', '4', '5', '6', '1', '2', '3'].map((digit) => (
           <button key={digit} type="button" className="key" onClick={() => tapDigit(digit)}>
             {digit}
           </button>
