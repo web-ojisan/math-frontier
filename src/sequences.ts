@@ -43,13 +43,14 @@ const FRACTIONS: { label: string; value: number }[] = [
 
 export const SEQUENCES: SequenceDef[] = [
   {
-    // 2のべき乗(順方向)。index n の項は 2^n。出題は「2^(n-1) を 2ばい」
+    // 2のべき乗(順方向)。index n の項は 2^n。出題は「同じ数を足す」形式
+    // (「2ばい」より「8 + 8 は?」の方が6歳に直感的。ユーザー決定 2026-09-03)
     id: 'pow2_up',
     titleJa: '2ばい の れつ',
     firstIndex: 1,
     lastIndex: 20, // 2^20 = 1,048,576 まで
     term: (index) => 2 ** index,
-    promptJa: (index) => `${2 ** (index - 1)} を 2ばい すると?`,
+    promptJa: (index) => `${2 ** (index - 1)} + ${2 ** (index - 1)} は?`,
     hasReverse: true,
   },
   {

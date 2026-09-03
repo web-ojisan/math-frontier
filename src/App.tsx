@@ -3,12 +3,14 @@
 // 反応時間は「出題表示から最初のタップまで」をfirstKeyMsとして記録する(CLAUDE.md 計測規約)。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadAttempts, saveAttempt } from './attempt-store';
-import { computeStageBossHp, damageFor, STAGE_COUNT } from './boss';
+import { buildEnemies, damageFor } from './boss';
 import { getSequence } from './sequences';
 import { estimateAllStates, type Attempt } from './state-estimator';
 
 // MVPは2のべき乗のみ(他の列は次のステップで解放)
 const seq = getSequence('pow2_up');
+// 敵ラインは固定(ざこ1〜4+ちゅうボス。boss.ts参照)
+const ENEMIES = buildEnemies(seq);
 
 type Screen = 'loading' | 'home' | 'battle' | 'victory';
 type VictoryInfo = { totalDamage: number; questions: number; newlyAuto: number };
@@ -117,7 +119,7 @@ export default function App() {
   if (screen === 'victory' && victory) {
     return (
       <main className="app center">
-        <p className="victory-title">ぜんぶの てきを たおした!</p>
+        <p className="victory-title">ちゅうボスまで ぜんぶ たおした!</p>
         <BossFigure stage={3} />
         <p className="victory-line">あたえた ダメージ: <strong>{victory.totalDamage}</strong></p>
         {victory.newlyAuto > 0 && (
@@ -162,12 +164,11 @@ function Battle({
   pastAttempts: Attempt[];
   onFinish: (sessionAttempts: Attempt[], info: VictoryInfo) => void;
 }) {
-  // 敵は3段階(小物→中ボス→大ボス)。HPは登り位置と記録から逆算する(boss.ts参照)
-  const [stage, setStage] = useState(1);
-  const [bossMaxHp, setBossMaxHp] = useState(() =>
-    computeStageBossHp(seq, estimateAllStates(pastAttempts), seq.firstIndex - 1, 1),
-  );
-  const [bossHp, setBossHp] = useState(bossMaxHp);
+  // 敵はマイルストーン固定のライン(ざこ1〜4+ちゅうボス)。
+  // 「その計算ができたら撃破」なので、HPは演出でしかなく、とどめは必ずマイルストーンの正答
+  const [enemyIndex, setEnemyIndex] = useState(0);
+  const enemy = ENEMIES[enemyIndex]!;
+  const [bossHp, setBossHp] = useState(ENEMIES[0]!.hp);
   const [sessionAttempts, setSessionAttempts] = useState<Attempt[]>([]);
   const [typed, setTyped] = useState('');
   const [effect, setEffect] = useState<Effect | null>(null);
@@ -231,24 +232,23 @@ function Battle({
     effectKeyRef.current += 1;
     if (correct) {
       const { damage, critical } = damageFor(correctAnswer, firstKeyMs);
-      const newHp = Math.max(0, bossHp - damage);
+      // 撃破条件は「マイルストーンの正答」。HPは演出なのでマイルストーン前は1で止める保険つき
+      const defeated = questionIndex === enemy.milestoneIndex;
+      const newHp = defeated ? 0 : Math.max(1, bossHp - damage);
       const newTotal = totalDamage + damage;
       setBossHp(newHp);
       setTotalDamage(newTotal);
       setMissStreak(0);
       setEffect({ kind: critical ? 'critical' : 'hit', damage, key: effectKeyRef.current });
 
-      if (newHp <= 0) {
-        if (stage < STAGE_COUNT) {
-          // 次の敵が登場。登りは続きから(HPは今の登り位置と記録から逆算)
-          const nextStage = stage + 1;
-          const statesNow = estimateAllStates([...pastAttempts, ...updated]);
-          const nextHp = computeStageBossHp(seq, statesNow, questionIndex, nextStage);
-          setStage(nextStage);
-          setBossMaxHp(nextHp);
-          setBossHp(nextHp);
+      if (defeated) {
+        if (enemyIndex < ENEMIES.length - 1) {
+          // 次の敵が登場。登りは続きから
+          const next = ENEMIES[enemyIndex + 1]!;
+          setEnemyIndex(enemyIndex + 1);
+          setBossHp(next.hp);
           setEffect({ kind: 'defeat', damage, key: effectKeyRef.current });
-          showQuestion(questionIndex >= seq.lastIndex ? seq.firstIndex : questionIndex + 1);
+          showQuestion(next.startIndex);
           return;
         }
         finishedRef.current = true;
@@ -264,13 +264,15 @@ function Battle({
         }, 1100);
         return;
       }
-      // 正解したら次の項へ。列を登り切ったら最初からもう1周
-      showQuestion(questionIndex >= seq.lastIndex ? seq.firstIndex : questionIndex + 1);
+      // 正解したら次の項へ
+      showQuestion(questionIndex + 1);
     } else if (missStreak + 1 >= 2) {
-      // 壁(2連続ミス)に当たったら最初から登り直し(知らない数をスキップして詰まないように)
+      // 壁(2連続ミス): 敵が回復し、この敵の区間の最初から登り直し
+      // (知らない数をスキップして詰まないように。最初の敵まで戻さない)
       setMissStreak(0);
+      setBossHp(enemy.hp);
       setEffect({ kind: 'guard', damage: 0, key: effectKeyRef.current });
-      showQuestion(seq.firstIndex);
+      showQuestion(enemy.startIndex);
     } else {
       // 1回のミスは軽いペナルティ(外れただけ)。同じ問題を解き直す
       setMissStreak(missStreak + 1);
@@ -314,12 +316,14 @@ function Battle({
   return (
     <main className="app battle">
       <div className="boss-area" key={effect?.kind === 'critical' ? `shake-${effect.key}` : 'still'}>
-        <p className="stage-label">てき {stage} / {STAGE_COUNT}</p>
+        <p className="stage-label">
+          てき {enemyIndex + 1} / {ENEMIES.length}: {enemy.name}
+        </p>
         <div className="hpbar">
-          <div className="hpfill" style={{ width: `${(bossHp / bossMaxHp) * 100}%` }} />
+          <div className="hpfill" style={{ width: `${(bossHp / enemy.hp) * 100}%` }} />
         </div>
         <div className={effect?.kind === 'critical' ? 'shake' : ''}>
-          <BossFigure stage={stage} />
+          <BossFigure stage={enemy.figure} />
         </div>
         {effect && (effect.kind === 'hit' || effect.kind === 'critical') && (
           <p key={effect.key} className={`damage-pop ${effect.kind}`}>
@@ -331,7 +335,7 @@ function Battle({
           <p key={effect.key} className="miss-pop">こうげきが はずれた!</p>
         )}
         {effect && effect.kind === 'guard' && (
-          <p key={effect.key} className="miss-pop">ガードされた! さいしょから もういちど!</p>
+          <p key={effect.key} className="miss-pop">ガードされた! てきが かいふくした!</p>
         )}
         {effect && effect.kind === 'defeat' && (
           <p key={effect.key} className="defeat-pop">たおした! つぎのてきが あらわれた!</p>
