@@ -14,9 +14,6 @@ import type { SequenceDef } from './sequences';
 /** 初めて遊ぶとき(記録なし)のボスHP。2+4+8+...と伸ばせば7問程度で倒せる弱さ */
 export const FIRST_BOSS_HP = 100;
 
-/** 1体のボスを倒すまでの目標問数(1セッション=数分で終わる長さの調整弁) */
-const TARGET_QUESTIONS = 12;
-
 /** 正答かつ速答ならボーナス。それ以外の正答は等倍(暗算パートを潰さない) */
 export function damageFor(answerValue: number, firstKeyMs: number): { damage: number; critical: boolean } {
   const critical = firstKeyMs <= DEFAULT_ESTIMATOR_CONFIG.autoFirstKeyMs;
@@ -24,31 +21,26 @@ export function damageFor(answerValue: number, firstKeyMs: number): { damage: nu
 }
 
 /**
- * ボスHPをフロンティアと既知項目から逆算する。
- * 期待ダメージ/問 = 高速想起(7割) + フロンティア(3割・成功率補正)の加重平均。
- * 想起候補の重みはスケジューラと同じ考え方(mental重め)で概算する。
+ * ボスHPを「列を最初から登り切る1回分+ちょい」から逆算する。
+ * 出題は固定の昇順(2→4→8→…)なので、既知の項を全部答えたダメージ合計(knownSum)が
+ * 1回の登りの基本ダメージ。HPをそれより少し大きくすることで、
+ * 「自己ベストを超える一歩(フロンティアの数)がとどめになる」体験を作る。
+ * 係数は実機チューニングの調整弁(速答1.5倍がどれだけ混ざるかで体感が変わる)。
  */
 export function computeBossHp(seq: SequenceDef, states: Map<string, ItemState>): number {
   const frontier = frontierIndex(seq, states);
 
-  let weightSum = 0;
-  let weightedValueSum = 0;
+  let knownSum = 0;
   for (let index = seq.firstIndex; index <= seq.lastIndex; index++) {
     const state = states.get(itemKey(seq.id, index)) ?? 'unknown';
     if (state === 'unknown') continue;
-    const weight = state === 'mental' ? 3 : 1.5;
-    weightSum += weight;
-    weightedValueSum += weight * seq.term(index);
+    knownSum += seq.term(index);
   }
 
-  if (weightSum === 0) return FIRST_BOSS_HP;
+  if (knownSum === 0) return FIRST_BOSS_HP;
 
-  const expectedRecall = weightedValueSum / weightSum;
-  // フロンティアは成功率6割・速答ボーナスなしとして概算
-  const expectedFrontier = frontier === null ? expectedRecall : seq.term(frontier) * 0.6;
-  const expectedPerQuestion = expectedRecall * 0.7 + expectedFrontier * 0.3;
-
-  const rawHp = expectedPerQuestion * TARGET_QUESTIONS;
+  const frontierValue = frontier === null ? 0 : seq.term(frontier);
+  const rawHp = knownSum * 1.25 + frontierValue * 0.5;
   // 読みやすいきりのいい数に丸める(上位2桁)
   const magnitude = 10 ** Math.max(0, Math.floor(Math.log10(rawHp)) - 1);
   return Math.max(FIRST_BOSS_HP, Math.round(rawHp / magnitude) * magnitude);

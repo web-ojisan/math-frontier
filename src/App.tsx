@@ -4,7 +4,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadAttempts, saveAttempt } from './attempt-store';
 import { computeBossHp, damageFor } from './boss';
-import { createRng, pickQuestion, type Question } from './scheduler';
 import { getSequence } from './sequences';
 import { estimateAllStates, type Attempt } from './state-estimator';
 
@@ -138,21 +137,19 @@ function Battle({
   const [missStreak, setMissStreak] = useState(0);
   const [totalDamage, setTotalDamage] = useState(0);
 
-  const rngRef = useRef(createRng((Date.now() % 2147483647) >>> 0));
-  const recentRef = useRef<number[]>([]);
   const shownAtRef = useRef(performance.now());
   const firstKeyAtRef = useRef<number | null>(null);
   const effectKeyRef = useRef(0);
   const finishedRef = useRef(false);
 
-  const [question, setQuestion] = useState<Question>(() =>
-    pickQuestion(seq, estimateAllStates(pastAttempts), [], rngRef.current),
-  );
+  // 出題は完全固定の昇順(2→4→8→…)。毎バトル、列の最初から登る。
+  // 序盤の簡単な数は即答クリティカルでサクサク進むウォームアップになり、
+  // 観察された遊び方(最初から唱えて伸ばす)とも一致する。
+  // ランダムな高速想起の出題(scheduler.ts)は将来の「そくとうモード」で使う。
+  const [questionIndex, setQuestionIndex] = useState(seq.firstIndex);
 
-  const showNextQuestion = (updated: Attempt[], lastIndex: number) => {
-    recentRef.current = [...recentRef.current, lastIndex].slice(-12);
-    const states = estimateAllStates([...pastAttempts, ...updated]);
-    setQuestion(pickQuestion(seq, states, recentRef.current, rngRef.current));
+  const showQuestion = (index: number) => {
+    setQuestionIndex(index);
     setTyped('');
     firstKeyAtRef.current = null;
     shownAtRef.current = performance.now();
@@ -177,12 +174,12 @@ function Battle({
     const now = performance.now();
     const firstKeyMs = Math.round((firstKeyAtRef.current ?? now) - shownAtRef.current);
     const totalMs = Math.round(now - shownAtRef.current);
-    const correctAnswer = seq.term(question.item.index);
+    const correctAnswer = seq.term(questionIndex);
     const correct = value === correctAnswer;
 
     const attempt: Attempt = {
       sequenceId: seq.id,
-      index: question.item.index,
+      index: questionIndex,
       answer: value,
       correct,
       firstKeyMs,
@@ -218,12 +215,13 @@ function Battle({
         }, 1100);
         return;
       }
-      showNextQuestion(updated, question.item.index);
+      // 正解したら次の項へ。列を登り切ったら最初からもう1周
+      showQuestion(questionIndex >= seq.lastIndex ? seq.firstIndex : questionIndex + 1);
     } else if (missStreak + 1 >= 2) {
-      // 連続ミスでその問題は引っ込める(当てずっぽうの連打が得にならない設計)
+      // 壁(2連続ミス)に当たったら最初から登り直し(知らない数をスキップして詰まないように)
       setMissStreak(0);
       setEffect({ kind: 'guard', damage: 0, key: effectKeyRef.current });
-      showNextQuestion(updated, question.item.index);
+      showQuestion(seq.firstIndex);
     } else {
       // 1回のミスは軽いペナルティ(外れただけ)。同じ問題を解き直す
       setMissStreak(missStreak + 1);
@@ -283,12 +281,12 @@ function Battle({
           <p key={effect.key} className="miss-pop">こうげきが はずれた!</p>
         )}
         {effect && effect.kind === 'guard' && (
-          <p key={effect.key} className="miss-pop">ガードされた! つぎのもんだい!</p>
+          <p key={effect.key} className="miss-pop">ガードされた! さいしょから もういちど!</p>
         )}
       </div>
 
       <div className="question-area">
-        <p className="prompt">{seq.promptJa(question.item.index)}</p>
+        <p className="prompt">{seq.promptJa(questionIndex)}</p>
         <p className="typed">{typed === '' ? ' ' : typed}</p>
       </div>
 

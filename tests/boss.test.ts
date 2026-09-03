@@ -35,11 +35,13 @@ describe('computeBossHp', () => {
     expect(big).toBeGreaterThan(small);
   });
 
-  it('フロンティア14の子には「十数問で倒せる」規模のHPになる', () => {
+  it('「1回登り切り+フロンティアへの一歩」で倒せる規模のHPになる', () => {
     const hp = computeBossHp(seq, statesUpTo(13, 'auto'));
-    // 既知の項の平均ダメージ(上位支配的で概ね2^13の数分の一)×12問 の範囲に収まること
-    const maxDamagePerQuestion = seq.term(13) * 1.5;
-    expect(hp).toBeGreaterThan(seq.term(13)); // 1問では倒せない
-    expect(hp).toBeLessThan(maxDamagePerQuestion * 12); // 12問のクリティカルで確実に倒せる
+    const knownSum = 2 ** 14 - 2; // 2+4+...+2^13
+    // 既知の項だけの1周(全部クリティカルでも1.5倍)では倒しきれない
+    // → 自己ベストを超える一歩(フロンティアの数)がとどめになる
+    expect(hp).toBeGreaterThan(knownSum * 1.5);
+    // 1周+フロンティア1問(クリティカル)なら確実に倒せる
+    expect(hp).toBeLessThanOrEqual(knownSum * 1.5 + seq.term(14) * 1.5);
   });
 });
