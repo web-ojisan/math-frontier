@@ -1,0 +1,234 @@
+/* かずのフロンティアのスタイル。夜空の中で戦うトーン。デザインは完全オリジナル。 */
+:root {
+  --color-bg: #1b1035;
+  --color-surface: #2a1b52;
+  --color-text: #f4efff;
+  --color-text-soft: #b6a8e0;
+  --color-primary: #ffd94d;
+  --color-monster: #7c5cff;
+  --color-hp: #ff5c7a;
+  --color-critical: #ffd94d;
+  --radius: 18px;
+  --font-family: 'Hiragino Maru Gothic ProN', 'BIZ UDGothic', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  user-select: none;
+}
+
+.app {
+  max-width: 480px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.center {
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.loading {
+  text-align: center;
+  color: var(--color-text-soft);
+}
+
+.title {
+  font-size: 1.6rem;
+  letter-spacing: 0.1em;
+  margin: 0;
+}
+
+.best {
+  font-size: 1.1rem;
+  margin: 0;
+}
+.best strong {
+  color: var(--color-primary);
+  font-size: 1.5rem;
+}
+.best-sub {
+  color: var(--color-text-soft);
+  font-size: 0.85rem;
+}
+
+.big-button {
+  font-family: inherit;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--color-bg);
+  background: var(--color-primary);
+  border: none;
+  border-radius: 999px;
+  padding: 0.9rem 3rem;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35);
+}
+.big-button:active {
+  transform: translateY(3px);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* ===== バトル ===== */
+
+.boss-area {
+  position: relative;
+  text-align: center;
+  padding-top: 0.5rem;
+}
+
+.boss-figure {
+  width: 180px;
+  height: auto;
+}
+
+.hpbar {
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+.hpfill {
+  height: 100%;
+  background: var(--color-hp);
+  border-radius: 999px;
+  transition: width 0.35s ease-out;
+}
+
+.damage-pop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 30%;
+  margin: 0;
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  animation: pop-up 0.9s ease-out forwards;
+  pointer-events: none;
+}
+.damage-pop.critical {
+  font-size: 3rem;
+  color: var(--color-critical);
+}
+
+.miss-pop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 40%;
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--color-text-soft);
+  animation: pop-up 0.9s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes pop-up {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.7);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-36px) scale(1);
+  }
+}
+
+.shake {
+  animation: shake 0.5s ease-in-out;
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-10px); }
+  40% { transform: translateX(9px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(4px); }
+}
+
+.question-area {
+  text-align: center;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+}
+.prompt {
+  font-size: 1.25rem;
+  margin: 0;
+}
+.typed {
+  font-size: 2rem;
+  font-weight: 700;
+  min-height: 2.5rem;
+  margin: 0.25rem 0 0;
+  color: var(--color-primary);
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-top: auto;
+}
+.key {
+  font-family: inherit;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: none;
+  border-radius: var(--radius);
+  padding: 0.8rem 0;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+}
+.key:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+.key-sub {
+  font-size: 1.1rem;
+  color: var(--color-text-soft);
+}
+.key-attack {
+  font-size: 1.2rem;
+  color: var(--color-bg);
+  background: var(--color-primary);
+}
+.key-attack:disabled {
+  opacity: 0.4;
+}
+
+/* ===== 勝利 ===== */
+
+.victory-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin: 0;
+}
+.victory-line {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.victory-line strong {
+  color: var(--color-primary);
+}
